@@ -1,1 +1,21 @@
-target
+# Rust
+**/target/
+
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+*.coverprofile
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
