@@ -4,7 +4,7 @@ package keymanager;
 
 import "km_common/proto/algorithms.proto";
 
-option go_package = "github.com/google/go-tpm-tools/keymanager/km_common/proto;keymanager";
+option go_package = "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanager";
 
 // The results of an Encaps operation.
 message KemCiphertext {

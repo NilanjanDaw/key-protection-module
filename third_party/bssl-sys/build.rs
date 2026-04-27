@@ -91,7 +91,7 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
     // Locate the BoringSSL source relative to this cargo manifest
-    // third_party/bssl-sys -> keymanager/boringssl
+    // third_party/bssl-sys -> boringssl
     let bssl_source_dir = Path::new(&manifest_dir).join("../../boringssl");
 
     // Auto-init git submodule if BoringSSL source is missing.

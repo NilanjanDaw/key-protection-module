@@ -124,7 +124,7 @@ const file_km_common_proto_status_proto_rawDesc = "" +
 	"\x12\x1d\n" +
 	"\x19STATUS_DECRYPTION_FAILURE\x10\v\x12\x1d\n" +
 	"\x19STATUS_ENCRYPTION_FAILURE\x10\f\x12 \n" +
-	"\x1cSTATUS_DECAPSULATION_FAILURE\x10\rBFZDgithub.com/google/go-tpm-tools/keymanager/km_common/proto;keymanagerb\x06proto3"
+	"\x1cSTATUS_DECAPSULATION_FAILURE\x10\rBQZOgithub.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanagerb\x06proto3"
 
 var (
 	file_km_common_proto_status_proto_rawDescOnce sync.Once

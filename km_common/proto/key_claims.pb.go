@@ -468,7 +468,7 @@ const file_km_common_proto_key_claims_proto_rawDesc = "" +
 	"\aKeyType\x12\x18\n" +
 	"\x14KEY_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eKEY_TYPE_VM_PROTECTION_BINDING\x10\x01\x12\x1e\n" +
-	"\x1aKEY_TYPE_VM_PROTECTION_KEY\x10\x02BFZDgithub.com/google/go-tpm-tools/keymanager/km_common/proto;keymanagerb\x06proto3"
+	"\x1aKEY_TYPE_VM_PROTECTION_KEY\x10\x02BQZOgithub.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanagerb\x06proto3"
 
 var (
 	file_km_common_proto_key_claims_proto_rawDescOnce sync.Once

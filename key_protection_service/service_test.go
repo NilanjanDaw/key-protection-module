@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"testing"
 
-	kpskcc "github.com/google/go-tpm-tools/keymanager/key_protection_service/key_custody_core"
+	kpskcc "github.com/GoogleCloudPlatform/key-protection-module/key_protection_service/key_custody_core"
 	"github.com/google/uuid"
 
-	keymanager "github.com/google/go-tpm-tools/keymanager/km_common/proto"
+	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 )
 
 type mockKPS struct {

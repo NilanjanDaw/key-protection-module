@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	api "github.com/google/go-tpm-tools/keymanager/workload_service/proto"
+	api "github.com/GoogleCloudPlatform/key-protection-module/workload_service/proto"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	kps "github.com/google/go-tpm-tools/keymanager/key_protection_service"
-	keymanager "github.com/google/go-tpm-tools/keymanager/km_common/proto"
-	wskcc "github.com/google/go-tpm-tools/keymanager/workload_service/key_custody_core"
+	kps "github.com/GoogleCloudPlatform/key-protection-module/key_protection_service"
+	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
+	wskcc "github.com/GoogleCloudPlatform/key-protection-module/workload_service/key_custody_core"
 )
 
 const expirationToleranceSecs = 5.0

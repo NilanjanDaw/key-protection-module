@@ -3,7 +3,7 @@ syntax = "proto3";
 // API definitions for the Workload Services Daemon (WSD)
 package keymanager.workload_service;
 
-option go_package = "github.com/google/go-tpm-tools/keymanager/workload_service/proto;api";
+option go_package = "github.com/GoogleCloudPlatform/key-protection-module/workload_service/proto;api";
 
 import "km_common/proto/algorithms.proto";
 import "km_common/proto/crypto_types.proto";

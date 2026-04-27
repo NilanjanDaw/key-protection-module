@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	keymanager "github.com/google/go-tpm-tools/keymanager/km_common/proto"
+	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 )
 
 // Supported algorithms and mechanisms.

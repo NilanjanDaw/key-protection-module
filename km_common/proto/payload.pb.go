@@ -213,7 +213,7 @@ const file_km_common_proto_payload_proto_rawDesc = "" +
 	"\talgorithm\x18\x01 \x01(\v2\x19.keymanager.HpkeAlgorithmR\talgorithm\x12%\n" +
 	"\x0ekem_ciphertext\x18\x02 \x01(\fR\rkemCiphertext\x12-\n" +
 	"\x12payload_ciphertext\x18\x03 \x01(\fR\x11payloadCiphertext\x12-\n" +
-	"\x12authentication_tag\x18\x04 \x01(\fR\x11authenticationTagBFZDgithub.com/google/go-tpm-tools/keymanager/km_common/proto;keymanagerb\x06proto3"
+	"\x12authentication_tag\x18\x04 \x01(\fR\x11authenticationTagBQZOgithub.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanagerb\x06proto3"
 
 var (
 	file_km_common_proto_payload_proto_rawDescOnce sync.Once

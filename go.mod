@@ -1,4 +1,4 @@
-module github.com/google/go-tpm-tools/keymanager
+module github.com/GoogleCloudPlatform/key-protection-module
 
 go 1.24.0
 

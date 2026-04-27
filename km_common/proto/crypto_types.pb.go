@@ -134,7 +134,7 @@ const file_km_common_proto_crypto_types_proto_rawDesc = "" +
 	"PubKeyInfo\x12:\n" +
 	"\talgorithm\x18\x01 \x01(\v2\x1c.keymanager.AlgorithmDetailsR\talgorithm\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x02 \x01(\fR\tpublicKeyBFZDgithub.com/google/go-tpm-tools/keymanager/km_common/proto;keymanagerb\x06proto3"
+	"public_key\x18\x02 \x01(\fR\tpublicKeyBQZOgithub.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanagerb\x06proto3"
 
 var (
 	file_km_common_proto_crypto_types_proto_rawDescOnce sync.Once

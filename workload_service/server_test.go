@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	kpskcc "github.com/google/go-tpm-tools/keymanager/key_protection_service/key_custody_core"
-	api "github.com/google/go-tpm-tools/keymanager/workload_service/proto"
+	kpskcc "github.com/GoogleCloudPlatform/key-protection-module/key_protection_service/key_custody_core"
+	api "github.com/GoogleCloudPlatform/key-protection-module/workload_service/proto"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	kps "github.com/google/go-tpm-tools/keymanager/key_protection_service"
-	keymanager "github.com/google/go-tpm-tools/keymanager/km_common/proto"
+	kps "github.com/GoogleCloudPlatform/key-protection-module/key_protection_service"
+	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 )
 
 func newTestServer(t *testing.T, kemGen kps.KeyProtectionService, bindingGen WorkloadService) *Server {

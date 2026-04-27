@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	keymanager "github.com/google/go-tpm-tools/keymanager/km_common/proto"
+	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 )
 
 // GenerateKEMKeypair is a stub for architectures where the Rust library is not supported.

@@ -418,7 +418,7 @@ const file_km_common_proto_algorithms_proto_rawDesc = "" +
 	"\x19KDF_ALGORITHM_HKDF_SHA256\x10\x01*O\n" +
 	"\rAeadAlgorithm\x12\x1e\n" +
 	"\x1aAEAD_ALGORITHM_UNSPECIFIED\x10\x00\x12\x1e\n" +
-	"\x1aAEAD_ALGORITHM_AES_256_GCM\x10\x01BFZDgithub.com/google/go-tpm-tools/keymanager/km_common/proto;keymanagerb\x06proto3"
+	"\x1aAEAD_ALGORITHM_AES_256_GCM\x10\x01BQZOgithub.com/GoogleCloudPlatform/key-protection-module/km_common/proto;keymanagerb\x06proto3"
 
 var (
 	file_km_common_proto_algorithms_proto_rawDescOnce sync.Once

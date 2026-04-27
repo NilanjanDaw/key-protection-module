@@ -10,7 +10,7 @@ package api
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	proto "github.com/google/go-tpm-tools/keymanager/km_common/proto"
+	proto "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -501,7 +501,7 @@ const file_workload_service_proto_api_proto_rawDesc = "" +
 	"\rshared_secret\x18\x01 \x01(\v2\x1b.keymanager.KemSharedSecretR\fsharedSecret\"N\n" +
 	"\x0eDestroyRequest\x12<\n" +
 	"\n" +
-	"key_handle\x18\x01 \x01(\v2\x15.keymanager.KeyHandleB\x06\xbaH\x03\xc8\x01\x01R\tkeyHandleBFZDgithub.com/google/go-tpm-tools/keymanager/workload_service/proto;apib\x06proto3"
+	"key_handle\x18\x01 \x01(\v2\x15.keymanager.KeyHandleB\x06\xbaH\x03\xc8\x01\x01R\tkeyHandleBQZOgithub.com/GoogleCloudPlatform/key-protection-module/workload_service/proto;apib\x06proto3"
 
 var (
 	file_workload_service_proto_api_proto_rawDescOnce sync.Once
