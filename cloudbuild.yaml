@@ -1,0 +1,159 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+substitutions:
+  # Logical defaults for image naming
+  _IMAGE_NAME: 'key-protection-module'
+  _IMAGE_NAME_TEST: 'kpm-test-workload'
+  # Functional defaults for tagging; overridden by triggers
+  _IMAGE_TAG: 'latest'
+  COMMIT_SHA: 'manual'
+
+
+steps:
+  # 1. Build the production container image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: BuildAgentImage
+    args:
+      - 'build'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # 2. Build the test workload image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: BuildTestImage
+    args:
+      - 'build'
+      - '-f'
+      - 'tests/Dockerfile.test'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # 3. Push both images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: PushImages
+    waitFor: ['BuildAgentImage', 'BuildTestImage']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}
+        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}
+
+  # 4. Run full test suite on a GCE VM (supports memfd_secret)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: RunVMTests
+    waitFor: ['PushImages']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        VM_NAME="kpm-test-vm-${BUILD_ID}"
+        ZONE="${_ZONE}"
+        IMAGE="${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}"
+        
+        # Ensure cleanup on exit
+        trap 'echo "Cleaning up VM..."; gcloud compute instances delete "$${VM_NAME}" --zone="$${ZONE}" --quiet || true' EXIT
+        
+        echo "Creating VM $${VM_NAME}..."
+        gcloud compute instances create "$${VM_NAME}" \
+          --zone="$${ZONE}" \
+          --machine-type=e2-standard-4 \
+          --boot-disk-size=50GB \
+          --image-family=cos-stable \
+          --image-project=cos-cloud \
+          --maintenance-policy=TERMINATE \
+          --provisioning-model=SPOT \
+          --scopes=cloud-platform \
+          --metadata=startup-script="
+            export DOCKER_CONFIG=/tmp/docker-config
+            mkdir -p \$$DOCKER_CONFIG
+            # Log in to Artifact Registry
+            docker-credential-gcr configure-docker --registries=${_LOCATION}-docker.pkg.dev
+            echo \"Pulling test container...\"
+            docker pull $${IMAGE}
+            echo \"Starting test container...\"
+            docker run --rm --security-opt seccomp=unconfined $${IMAGE}
+            exit_code=\$$?
+            echo \"KPM_TEST_CONTAINER_EXITED_WITH_STATUS: \$$exit_code\"
+          "
+        
+        echo "Waiting for tests to complete (polling serial console)..."
+        for i in {1..60}; do
+          SERIAL_OUT=$$(gcloud compute instances get-serial-port-output "$${VM_NAME}" --zone="$${ZONE}" 2>/dev/null || echo "")
+          if echo "$${SERIAL_OUT}" | grep -q "KPM_TEST_CONTAINER_EXITED_WITH_STATUS: 0"; then
+            echo "SUCCESS: All tests passed on VM."
+            exit 0
+          fi
+          if echo "$${SERIAL_OUT}" | grep -q "KPM_TEST_CONTAINER_EXITED_WITH_STATUS:"; then
+            echo "FAILED: Test container exited with non-zero status."
+            echo "--- SERIAL LOGS START ---"
+            echo "$${SERIAL_OUT}"
+            echo "--- SERIAL LOGS END ---"
+            exit 1
+          fi
+          sleep 10
+        done
+        echo "TIMEOUT: VM tests did not complete within 10 minutes."
+        exit 1
+
+  # 5. Final validation: Containerized socket check for the production image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: FinalSocketCheck
+    waitFor: ['RunVMTests']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        mkdir -p /workspace/socket
+        docker run -d --name agent-verify \
+          -v /workspace/socket:/run/container_launcher \
+          '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
+        
+        # Wait for socket
+        timeout 30s bash -c 'until [ -S /workspace/socket/agent.sock ]; do sleep 1; done'
+        
+        # Basic API probe
+        docker run --rm --user root \
+          -v /workspace/socket:/socket \
+          curlimages/curl:latest -s --unix-socket /socket/agent.sock http://localhost/v1/capabilities \
+          | grep "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256"
+        
+        docker rm -f agent-verify
+
+  # 6. Final step: Tag verified image as latest and push
+  - name: 'gcr.io/cloud-builders/docker'
+    id: ReleaseLatest
+    waitFor: ['FinalSocketCheck']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker tag ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA} ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+
+images:
+  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
+  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  # Use a larger machine from the standard pool for intensive Rust compilation
+  machineType: 'E2_HIGHCPU_32'
