@@ -62,10 +62,10 @@ jobs:
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       
       - name: Install bindgen-cli
-        run: cargo install --locked --version 0.70.1 bindgen-cli
+        run: cargo install --locked --version 0.72.1 bindgen-cli
       
       - name: Install cbindgen
-        run: cargo install --locked --version 0.27.0 cbindgen
+        run: cargo install --locked --version 0.29.2 cbindgen
 
       - name: Generate FFI Headers
         run: ./generate_ffi_headers.sh
