@@ -48,18 +48,15 @@ COPY . .
 # Generate FFI headers
 RUN ./generate_ffi_headers.sh
 
-# Build Rust workspace in release mode
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/target \
-    cargo build --release --workspace
-
-# Build the Go service
+# Build Rust workspace and Go service in a single step to preserve cache mounts
 # Ensure CGO is enabled and points to the Rust library
 ENV CGO_ENABLED=1
 ENV CGO_LDFLAGS="-L/app/target/release"
-# Add ldflags for optimization and lazy loading of shared libs, matching go-tpm-tools
-RUN go build -v -o /app/agent \
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --workspace && \
+    go build -v -o /app/agent \
     -ldflags="-extldflags=-Wl,-z,lazy -s -w" \
     ./cmd/agent
 

@@ -47,9 +47,9 @@ COPY . .
 
 # Generate FFI headers and build Rust in debug mode for faster tests
 RUN ./generate_ffi_headers.sh
+# Build without cache mount for target to ensure artifacts persist for the ENTRYPOINT
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/target \
     cargo build --workspace
 
 # The entrypoint runs all tests and exits with the corresponding code

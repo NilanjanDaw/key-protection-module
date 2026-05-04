@@ -11,15 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 substitutions:
   # Logical defaults for image naming
   _IMAGE_NAME: 'key-protection-module'
   _IMAGE_NAME_TEST: 'kpm-test-workload'
   # Functional defaults for tagging; overridden by triggers
   _IMAGE_TAG: 'latest'
-  COMMIT_SHA: 'manual'
-
 
 steps:
   # 0. Fetch git submodules
