@@ -145,6 +145,9 @@ jobs:
       - name: Generate FFI Headers
         run: ./generate_ffi_headers.sh
 
+      - name: Build Rust Libraries
+        run: cargo build --workspace
+
       - name: Rust Format Check
         run: cargo fmt --all -- --check
       
@@ -196,6 +199,9 @@ jobs:
       
       - name: Generate FFI Headers
         run: ./generate_ffi_headers.sh
+
+      - name: Build Rust Libraries
+        run: cargo build --workspace
 
       - name: Check for CGO Warnings (gcc)
         run: CGO_CFLAGS=-Werror CC=gcc go build ./...
