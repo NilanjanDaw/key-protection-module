@@ -22,9 +22,15 @@ substitutions:
 
 
 steps:
+  # 0. Fetch git submodules
+  - name: 'gcr.io/cloud-builders/git'
+    id: FetchSubmodules
+    args: ['submodule', 'update', '--init', '--recursive']
+
   # 1. Build the production container image
   - name: 'gcr.io/cloud-builders/docker'
     id: BuildAgentImage
+    waitFor: ['FetchSubmodules']
     args:
       - 'build'
       - '-t'
@@ -36,6 +42,7 @@ steps:
   # 2. Build the test workload image
   - name: 'gcr.io/cloud-builders/docker'
     id: BuildTestImage
+    waitFor: ['FetchSubmodules']
     args:
       - 'build'
       - '-f'
