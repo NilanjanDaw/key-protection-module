@@ -16,7 +16,13 @@
 FROM golang:1.24-bookworm AS builder
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ARG RUSTUP_VERSION="1.26.0"
+ARG RUSTUP_INIT_SHA256="0b2f6c8f85a3d02fde2efc0ced4657869d73fccfce59defb4e8d29233116e6db"
+RUN curl -sSfL "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" -o rustup-init \
+    && echo "${RUSTUP_INIT_SHA256} *rustup-init" | sha256sum -c - \
+    && chmod +x rustup-init \
+    && ./rustup-init -y --no-modify-path --profile minimal \
+    && rm rustup-init
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install build dependencies
@@ -38,7 +44,8 @@ RUN curl -sSL https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3
 ENV PATH="/opt/cmake-3.28.3-linux-x86_64/bin:${PATH}"
 
 # Install cbindgen and bindgen-cli
-RUN cargo install cbindgen bindgen-cli
+RUN cargo install --locked --version 0.29.2 cbindgen && \
+    cargo install --locked --version 0.72.1 bindgen-cli
 
 WORKDIR /app
 
@@ -55,13 +62,13 @@ ENV CGO_LDFLAGS="-L/app/target/release"
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --release --workspace && \
+    cargo build --locked --release --workspace && \
     go build -v -o /app/agent \
-    -ldflags="-extldflags=-Wl,-z,lazy -s -w" \
+    -ldflags="-extldflags=-Wl,-z,now -s -w" \
     ./cmd/agent
 
 # Final runtime image
-FROM debian:trixie-slim
+FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/agent /usr/local/bin/agent
