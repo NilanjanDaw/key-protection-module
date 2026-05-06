@@ -18,6 +18,7 @@ substitutions:
   # Functional defaults for tagging; overridden by triggers
   _IMAGE_TAG: 'latest'
   # Infrastructure defaults; typically overridden by Cloud Build triggers
+  _REPO_NAME: ''
   _ZONE: ''
 
 steps:
@@ -33,7 +34,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
+      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -47,7 +48,7 @@ steps:
       - '-f'
       - 'tests/Dockerfile.test'
       - '-t'
-      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}'
+      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -60,8 +61,8 @@ steps:
     args:
       - '-c'
       - |
-        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}
-        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}
 
   # 4. Create a GCE VM for tests
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -81,7 +82,7 @@ steps:
           --provisioning-model=SPOT \
           --scopes=cloud-platform \
           --metadata-from-file=startup-script=scripts/vm-test-startup.sh \
-          --metadata="location=${LOCATION},test_image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}"
+          --metadata="location=${LOCATION},test_image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}"
 
   # 5. Monitor tests and cleanup
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -108,7 +109,7 @@ steps:
         mkdir -p /workspace/socket
         docker run -d --name agent-verify \
           -v /workspace/socket:/run/container_launcher \
-          '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
+          '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
         
         # Wait for socket
         timeout 30s bash -c 'until [ -S /workspace/socket/agent.sock ]; do sleep 1; done'
@@ -129,12 +130,12 @@ steps:
     args:
       - '-c'
       - |
-        docker tag ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA} ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
-        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+        docker tag ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA} ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
 
 images:
-  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
-  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}'
+  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
+  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}'
 
 options:
   logging: CLOUD_LOGGING_ONLY
