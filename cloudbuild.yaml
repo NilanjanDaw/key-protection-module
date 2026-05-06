@@ -17,6 +17,8 @@ substitutions:
   _IMAGE_NAME_TEST: 'kpm-test-workload'
   # Functional defaults for tagging; overridden by triggers
   _IMAGE_TAG: 'latest'
+  # Infrastructure defaults; typically overridden by Cloud Build triggers
+  _ZONE: ''
 
 steps:
   # 0. Fetch git submodules
@@ -31,7 +33,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
+      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -45,7 +47,7 @@ steps:
       - '-f'
       - 'tests/Dockerfile.test'
       - '-t'
-      - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}'
+      - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -58,27 +60,19 @@ steps:
     args:
       - '-c'
       - |
-        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}
-        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}
 
-  # 4. Run full test suite on a GCE VM (supports memfd_secret)
+  # 4. Create a GCE VM for tests
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: RunVMTests
+    id: CreateTestVM
     waitFor: ['PushImages']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        VM_NAME="kpm-test-vm-${BUILD_ID}"
-        ZONE="${_ZONE}"
-        IMAGE="${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME_TEST}:${COMMIT_SHA}"
-        
-        # Ensure cleanup on exit
-        trap 'echo "Cleaning up VM..."; gcloud compute instances delete "$${VM_NAME}" --zone="$${ZONE}" --quiet || true' EXIT
-        
-        echo "Creating VM $${VM_NAME}..."
-        gcloud compute instances create "$${VM_NAME}" \
-          --zone="$${ZONE}" \
+        gcloud compute instances create "kpm-test-vm-${BUILD_ID}" \
+          --zone="${_ZONE}" \
           --machine-type=e2-standard-4 \
           --boot-disk-size=50GB \
           --image-family=cos-stable \
@@ -86,42 +80,27 @@ steps:
           --maintenance-policy=TERMINATE \
           --provisioning-model=SPOT \
           --scopes=cloud-platform \
-          --metadata=startup-script="
-            export DOCKER_CONFIG=/tmp/docker-config
-            mkdir -p \$$DOCKER_CONFIG
-            # Log in to Artifact Registry
-            docker-credential-gcr configure-docker --registries=${_LOCATION}-docker.pkg.dev
-            echo \"Pulling test container...\"
-            docker pull $${IMAGE}
-            echo \"Starting test container...\"
-            docker run --rm --security-opt seccomp=unconfined $${IMAGE}
-            exit_code=\$$?
-            echo \"KPM_TEST_CONTAINER_EXITED_WITH_STATUS: \$$exit_code\"
-          "
-        
-        echo "Waiting for tests to complete (polling serial console)..."
-        for i in {1..60}; do
-          SERIAL_OUT=$$(gcloud compute instances get-serial-port-output "$${VM_NAME}" --zone="$${ZONE}" 2>/dev/null || echo "")
-          if echo "$${SERIAL_OUT}" | grep -q "KPM_TEST_CONTAINER_EXITED_WITH_STATUS: 0"; then
-            echo "SUCCESS: All tests passed on VM."
-            exit 0
-          fi
-          if echo "$${SERIAL_OUT}" | grep -q "KPM_TEST_CONTAINER_EXITED_WITH_STATUS:"; then
-            echo "FAILED: Test container exited with non-zero status."
-            echo "--- SERIAL LOGS START ---"
-            echo "$${SERIAL_OUT}"
-            echo "--- SERIAL LOGS END ---"
-            exit 1
-          fi
-          sleep 10
-        done
-        echo "TIMEOUT: VM tests did not complete within 10 minutes."
-        exit 1
+          --metadata-from-file=startup-script=scripts/vm-test-startup.sh \
+          --metadata="location=${LOCATION},test_image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME_TEST}:${SHORT_SHA}"
 
-  # 5. Final validation: Containerized socket check for the production image
+  # 5. Monitor tests and cleanup
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: MonitorVMTests
+    waitFor: ['CreateTestVM']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        VM_NAME="kpm-test-vm-${BUILD_ID}"
+        ZONE="${_ZONE}"
+        # Ensure cleanup on exit
+        trap 'echo "Cleaning up VM..."; gcloud compute instances delete "$${VM_NAME}" --zone="$${ZONE}" --quiet || true' EXIT
+        ./scripts/vm-test-monitor.sh "$${VM_NAME}" "$${ZONE}"
+
+  # 6. Final validation: Containerized socket check for the production image
   - name: 'gcr.io/cloud-builders/docker'
     id: FinalSocketCheck
-    waitFor: ['RunVMTests']
+    waitFor: ['MonitorVMTests']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -129,7 +108,7 @@ steps:
         mkdir -p /workspace/socket
         docker run -d --name agent-verify \
           -v /workspace/socket:/run/container_launcher \
-          '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
+          '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
         
         # Wait for socket
         timeout 30s bash -c 'until [ -S /workspace/socket/agent.sock ]; do sleep 1; done'
@@ -142,7 +121,7 @@ steps:
         
         docker rm -f agent-verify
 
-  # 6. Final step: Tag verified image as latest and push
+  # 7. Final step: Tag verified image as latest and push
   - name: 'gcr.io/cloud-builders/docker'
     id: ReleaseLatest
     waitFor: ['FinalSocketCheck']
@@ -150,12 +129,12 @@ steps:
     args:
       - '-c'
       - |
-        docker tag ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA} ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
-        docker push ${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+        docker tag ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA} ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
+        docker push ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}
 
 images:
-  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${COMMIT_SHA}'
-  - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}'
+  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${SHORT_SHA}'
+  - '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${_IMAGE_NAME}:${_IMAGE_TAG}'
 
 options:
   logging: CLOUD_LOGGING_ONLY
