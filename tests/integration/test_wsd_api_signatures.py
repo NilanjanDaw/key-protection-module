@@ -144,70 +144,61 @@ def test_enumerate_keys_success(wsd_client, valid_key_handle):
 # --- 4. Decapsulate Tests ---
 
 @pytest.mark.parametrize(
-    "payload,expected_status,expected_error_subset",
+    "payload_gen_fn,expected_status,expected_error_subset",
     [
         # Missing key_handle
         (
-            {"ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
+            lambda key: {"ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
             400,
             "invalid request"
         ),
         # Missing ciphertext
         (
-            {"key_handle": {"handle": str(uuid.uuid4())}},
+            lambda key: {"key_handle": {"handle": str(uuid.uuid4())}},
             400,
             "invalid request"
         ),
         # Invalid UUID for key handle
         (
-            {"key_handle": {"handle": "not-a-uuid"}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
+            lambda key: {"key_handle": {"handle": "not-a-uuid"}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
             400,
             "invalid key_handle.handle"
         ),
         # Unsupported KEM algorithm
         (
-            {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_UNSPECIFIED", "ciphertext": "dGVzdA=="}},
+            lambda key: {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_UNSPECIFIED", "ciphertext": "dGVzdA=="}},
             400,
             "unsupported ciphertext algorithm: 0"
         ),
         # Empty ciphertext bytes
         (
-            {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": ""}},
+            lambda key: {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": ""}},
             400,
             "ciphertext.ciphertext must not be empty"
         ),
         # Key not found (valid UUID but non-existent)
         (
-            {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
+            lambda key: {"key_handle": {"handle": str(uuid.uuid4())}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
             404,
             "KEM key handle not found"
         ),
+        # Invalid Ciphertext (triggers decapsulation failure in backend -> 500)
+        (
+            lambda key: {"key_handle": {"handle": key}, "ciphertext": {"algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256", "ciphertext": "dGVzdA=="}},
+            500,
+            "failed to decap and seal"
+        ),
     ]
 )
-def test_decapsulate_signature_errors(wsd_client, payload, expected_status, expected_error_subset):
+def test_decapsulate_signature(wsd_client, valid_key_handle, payload_gen_fn, expected_status, expected_error_subset):
     base_url, session = wsd_client
+    payload = payload_gen_fn(valid_key_handle)
     resp = session.post(f"{base_url}/v1/keys:decap", json=payload)
     assert resp.status_code == expected_status, f"Response: {resp.text}"
     
     data = resp.json()
     validate(instance=data, schema=ERROR_SCHEMA)
     assert expected_error_subset in data["error"]
-
-def test_decapsulate_invalid_ciphertext(wsd_client, valid_key_handle):
-    base_url, session = wsd_client
-    payload = {
-        "key_handle": {"handle": valid_key_handle},
-        "ciphertext": {
-            "algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256",
-            "ciphertext": "dGVzdA=="
-        }
-    }
-    resp = session.post(f"{base_url}/v1/keys:decap", json=payload)
-    assert resp.status_code == 500, f"Response: {resp.text}"
-    
-    data = resp.json()
-    validate(instance=data, schema=ERROR_SCHEMA)
-    assert "failed to decap and seal" in data["error"]
 
 # --- 5. Destroy Key Tests ---
 
