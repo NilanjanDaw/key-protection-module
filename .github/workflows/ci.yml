@@ -213,3 +213,17 @@ jobs:
       
       - name: Check for CGO Warnings (clang)
         run: CGO_CFLAGS=-Werror CC=clang go build ./...
+
+  buf:
+    name: Buf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+      
+      - uses: bufbuild/buf-action@v1
+        with:
+          lint: true
+          breaking: true
+          against: "https://github.com/${{ github.repository }}.git#branch=main"
