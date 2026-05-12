@@ -66,7 +66,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 
 # Set up Python virtual environment with dependencies pre-cached
 RUN python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install requests requests-unixsocket pytest jsonschema
+    /opt/venv/bin/pip install -r tests/requirements.txt
 
 # The entrypoint runs all tests and exits with the corresponding code
 ENTRYPOINT ["/bin/bash", "-c", "set -o pipefail && cargo test --locked --workspace && GOCACHE=/tmp/go-cache go test -v ./... && GOCACHE=/tmp/go-cache go test -v -race -tags integration ./..."]
