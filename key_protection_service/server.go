@@ -49,7 +49,10 @@ func newServerWithKPS(port int, kps KeyProtectionService) (*Server, error) {
 
 // Serve starts the gRPC server listening on the given port.
 func (s *Server) Serve() error {
-	return s.grpcServer.Serve(s.listener)
+	if err := s.grpcServer.Serve(s.listener); err != nil {
+		return fmt.Errorf("failed to serve KPS gRPC server: %w", err)
+	}
+	return nil
 }
 
 // Shutdown gracefully shuts down the server.
@@ -63,7 +66,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		s.grpcServer.Stop() // Force stop if context is cancelled
-		return ctx.Err()
+		return fmt.Errorf("KPS gRPC shutdown context cancelled: %w", ctx.Err())
 	case <-shutdownDone:
 		return nil
 	}

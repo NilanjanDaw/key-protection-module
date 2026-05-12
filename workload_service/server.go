@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -345,6 +346,9 @@ var (
 	// ClaimsRequestTimeout is the maximum time to wait for enqueuing the request to
 	// claims channel for getting the key claims.
 	ClaimsRequestTimeout = 5 * time.Second
+	// WsdReadHeaderTimeout is the maximum time allowed to read HTTP request headers.
+	// It is set to mitigate Slowloris attacks.
+	WsdReadHeaderTimeout = 5 * time.Second
 	// RPCTimeout is the maximum time to wait for remote KPS RPC calls.
 	RPCTimeout = 5 * time.Second
 )
@@ -410,7 +414,10 @@ func NewServer(keyProtectionService KeyProtectionService, workloadService Worklo
 	mux.HandleFunc("GET /v1/capabilities", s.handleGetCapabilities)
 	mux.HandleFunc("GET /v1/keys", s.handleEnumerateKeys)
 	mux.HandleFunc("POST /v1/keys:destroy", s.handleDestroy)
-	s.httpServer = &http.Server{Handler: mux}
+	s.httpServer = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: WsdReadHeaderTimeout,
+	}
 
 	_ = os.Remove(socketPath)
 	ln, err := net.Listen("unix", socketPath)
@@ -430,7 +437,10 @@ func NewServer(keyProtectionService KeyProtectionService, workloadService Worklo
 
 // Serve starts the HTTP server listening on the given unix socket path.
 func (s *Server) Serve() error {
-	return s.httpServer.Serve(s.listener)
+	if err := s.httpServer.Serve(s.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("failed to serve WSD server: %w", err)
+	}
+	return nil
 }
 
 // Shutdown gracefully shuts down the server.
@@ -807,7 +817,12 @@ func (s *Server) handleGetKEMKeyClaims(ctx context.Context, id uuid.UUID) (*keym
 	}
 
 	// Calculate remaining time.
-	remaining := time.Duration(remainingLifespanSecs) * time.Second
+	var remaining time.Duration
+	if remainingLifespanSecs > 9223372036 { // Max seconds for time.Duration (~292 years)
+		remaining = time.Duration(math.MaxInt64)
+	} else {
+		remaining = time.Duration(remainingLifespanSecs) * time.Second
+	}
 
 	// Create KeyClaims
 	claims := &keymanager.KeyClaims{
@@ -882,7 +897,7 @@ func (s *Server) GetKeyClaims(ctx context.Context, keyHandle string, keyType key
 	select {
 	case s.claimsChan <- &ClaimsCall{Ctx: ctx, Request: req, RespChan: respChan}:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("claims request context cancelled: %w", ctx.Err())
 	case <-time.After(ClaimsRequestTimeout):
 		return nil, fmt.Errorf("failed to send request: claims channel is full or worker is stuck")
 	}
@@ -893,7 +908,7 @@ func (s *Server) GetKeyClaims(ctx context.Context, keyHandle string, keyType key
 		}
 		return result.Reply, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("claims response context cancelled: %w", ctx.Err())
 	case <-time.After(ClaimsResponseTimeout):
 		return nil, fmt.Errorf("timed out waiting for processClaims to respond for key: %s", keyHandle)
 	}
