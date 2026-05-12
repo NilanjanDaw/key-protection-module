@@ -10,6 +10,9 @@ from jsonschema import validate, ValidationError
 requests_unixsocket.monkeypatch()
 
 import json
+import base64
+from pyhpke import AEADId, CipherSuite, KDFId, KEMId
+from pyhpke.consts import Mode
 
 # Helper to load JSON schemas
 def load_schema(name):
@@ -35,7 +38,7 @@ def wsd_client():
     return base_url, session
 
 @pytest.fixture(scope="function")
-def valid_key_handle(wsd_client):
+def valid_key_pair(wsd_client):
     base_url, session = wsd_client
     payload = {
         "algorithm": {
@@ -46,20 +49,25 @@ def valid_key_handle(wsd_client):
         },
         "lifespan": 3600
     }
-    resp = session.post(f"{base_url}/v1/keys:generate_key", json=payload)
+    resp = session.post(f"{base_url}/v1/keys:generate_key", json=payload, timeout=10)
     assert resp.status_code == 200, f"Response: {resp.text}"
     data = resp.json()
-    return data["key_handle"]["handle"]
+    return data["key_handle"]["handle"], data["pub_key"]["public_key"]
 
-# --- 1. Get Capabilities Tests ---
+@pytest.fixture(scope="function")
+def valid_key_handle(valid_key_pair):
+    handle, _ = valid_key_pair
+    return handle
+
+# --- Get Capabilities Tests ---
 
 def test_get_capabilities_success(wsd_client):
     base_url, session = wsd_client
-    resp = session.get(f"{base_url}/v1/capabilities")
+    resp = session.get(f"{base_url}/v1/capabilities", timeout=10)
     assert resp.status_code == 200, f"Response: {resp.text}"
     validate(instance=resp.json(), schema=CAPABILITIES_SCHEMA)
 
-# --- 2. Generate Key Tests ---
+# --- Generate Key Tests ---
 
 @pytest.mark.parametrize(
     "payload,expected_status,expected_error_subset",
@@ -119,7 +127,7 @@ def test_get_capabilities_success(wsd_client):
 )
 def test_generate_key_signature(wsd_client, payload, expected_status, expected_error_subset):
     base_url, session = wsd_client
-    resp = session.post(f"{base_url}/v1/keys:generate_key", json=payload)
+    resp = session.post(f"{base_url}/v1/keys:generate_key", json=payload, timeout=10)
     assert resp.status_code == expected_status, f"Response: {resp.text}"
     
     if expected_status == 200:
@@ -129,11 +137,11 @@ def test_generate_key_signature(wsd_client, payload, expected_status, expected_e
         validate(instance=data, schema=ERROR_SCHEMA)
         assert expected_error_subset in data["error"]
 
-# --- 3. Enumerate Keys Tests ---
+# --- Enumerate Keys Tests ---
 
 def test_enumerate_keys_success(wsd_client, valid_key_handle):
     base_url, session = wsd_client
-    resp = session.get(f"{base_url}/v1/keys")
+    resp = session.get(f"{base_url}/v1/keys", timeout=10)
     assert resp.status_code == 200, f"Response: {resp.text}"
     data = resp.json()
     validate(instance=data, schema=ENUMERATE_KEYS_SCHEMA)
@@ -141,7 +149,7 @@ def test_enumerate_keys_success(wsd_client, valid_key_handle):
     handles = [k["key_handle"]["handle"] for k in data["key_infos"]]
     assert valid_key_handle in handles
 
-# --- 4. Decapsulate Tests ---
+# --- Decapsulate Tests ---
 
 @pytest.mark.parametrize(
     "payload_gen_fn,expected_status,expected_error_subset",
@@ -193,26 +201,73 @@ def test_enumerate_keys_success(wsd_client, valid_key_handle):
 def test_decapsulate_signature(wsd_client, valid_key_handle, payload_gen_fn, expected_status, expected_error_subset):
     base_url, session = wsd_client
     payload = payload_gen_fn(valid_key_handle)
-    resp = session.post(f"{base_url}/v1/keys:decap", json=payload)
+    resp = session.post(f"{base_url}/v1/keys:decap", json=payload, timeout=10)
     assert resp.status_code == expected_status, f"Response: {resp.text}"
     
     data = resp.json()
     validate(instance=data, schema=ERROR_SCHEMA)
     assert expected_error_subset in data["error"]
 
-# --- 5. Destroy Key Tests ---
+def test_decapsulate_success(wsd_client, valid_key_pair):
+    base_url, session = wsd_client
+    key_handle, pub_key_b64 = valid_key_pair
+    
+    # 1. Initialize HPKE suite in Python (DHKEM_X25519, HKDF_SHA256, AES256_GCM)
+    suite = CipherSuite.new(KEMId.DHKEM_X25519_HKDF_SHA256, KDFId.HKDF_SHA256, AEADId.AES256_GCM)
+    kem = suite.kem
+    
+    pub_key_bytes = base64.b64decode(pub_key_b64)
+    kem_pub_key = kem.deserialize_public_key(pub_key_bytes)
+    
+    # 2. Perform HPKE encapsulation and seal a dummy payload
+    # Match Go FFI behavior by passing empty info AAD during context setup
+    enc, sender_context = suite.create_sender_context(kem_pub_key, b"")
+    
+    plaintext = b"authentic-secret-32-bytes-value!" # 32-byte payload
+    ciphertext = sender_context.seal(plaintext)
+    
+    # Base64 encode the encapsulated key (ciphertext)
+    enc_b64 = base64.b64encode(enc).decode("utf-8")
+    
+    # 2. Call WSD decapsulate API
+    payload = {
+        "key_handle": {"handle": key_handle},
+        "ciphertext": {
+            "algorithm": "KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256",
+            "ciphertext": enc_b64
+        }
+    }
+    
+    resp = session.post(f"{base_url}/v1/keys:decap", json=payload, timeout=10)
+    assert resp.status_code == 200, f"Response: {resp.text}"
+    
+    data = resp.json()
+    validate(instance=data, schema=DECAPS_RESPONSE_SCHEMA)
+    
+    returned_secret_b64 = data["shared_secret"]["secret"]
+    shared_secret_bytes = base64.b64decode(returned_secret_b64)
+    
+    # 3. Use the returned KEM shared secret to initialize HPKE receiver context in Python
+    # This mimics the receiver context setup using raw KEM secret.
+    recipient_context = suite._key_schedule_r(Mode.BASE, shared_secret_bytes, b"", b"", b"")
+    
+    # 4. Open the ciphertext locally and verify it matches the original plaintext!
+    decrypted = recipient_context.open(ciphertext)
+    assert decrypted == plaintext, f"Payload mismatch! Expected: {plaintext}, Got: {decrypted}"
+
+# --- Destroy Key Tests ---
 
 def test_destroy_key_success(wsd_client, valid_key_handle):
     base_url, session = wsd_client
     payload = {"key_handle": {"handle": valid_key_handle}}
     
     # Destroy
-    resp = session.post(f"{base_url}/v1/keys:destroy", json=payload)
+    resp = session.post(f"{base_url}/v1/keys:destroy", json=payload, timeout=10)
     assert resp.status_code == 204, f"Response: {resp.text}"
     assert resp.text == "" # 204 should have no body
     
     # Verify it is gone (enumerate)
-    resp_enum = session.get(f"{base_url}/v1/keys")
+    resp_enum = session.get(f"{base_url}/v1/keys", timeout=10)
     assert resp_enum.status_code == 200, f"Response: {resp_enum.text}"
     handles = [k["key_handle"]["handle"] for k in resp_enum.json()["key_infos"]]
     assert valid_key_handle not in handles
@@ -242,7 +297,7 @@ def test_destroy_key_success(wsd_client, valid_key_handle):
 )
 def test_destroy_key_signature_errors(wsd_client, payload, expected_status, expected_error_subset):
     base_url, session = wsd_client
-    resp = session.post(f"{base_url}/v1/keys:destroy", json=payload)
+    resp = session.post(f"{base_url}/v1/keys:destroy", json=payload, timeout=10)
     assert resp.status_code == expected_status, f"Response: {resp.text}"
     
     data = resp.json()

@@ -39,10 +39,25 @@ echo "Logging into Artifact Registry at ${LOCATION}-docker.pkg.dev..."
 docker-credential-gcr configure-docker --registries="${LOCATION}-docker.pkg.dev"
 
 echo "Pulling test container: $IMAGE"
-docker pull "$IMAGE"
+pull_success=false
+for i in {1..3}; do
+  if docker pull "$IMAGE"; then
+    pull_success=true
+    break
+  fi
+  echo "WARNING: docker pull failed (attempt $i/3), retrying in 5 seconds..."
+  sleep 5
+done
+
+if [ "$pull_success" = false ]; then
+  echo "ERROR: Failed to pull docker image after 3 attempts."
+  echo "KPM_TEST_CONTAINER_EXITED_WITH_STATUS: 125"
+  exit 1
+fi
 
 echo "Starting test container..."
 # memfd_secret requires seccomp=unconfined on some COS versions or kernel configs
+set +e
 if [ -n "$TEST_COMMAND" ]; then
   echo "Running custom test command: $TEST_COMMAND"
   docker run --rm --security-opt seccomp=unconfined --entrypoint /bin/bash "$IMAGE" -c "$TEST_COMMAND"
@@ -50,5 +65,7 @@ else
   docker run --rm --security-opt seccomp=unconfined "$IMAGE"
 fi
 exit_code=$?
+set -e
 
 echo "KPM_TEST_CONTAINER_EXITED_WITH_STATUS: $exit_code"
+exit "$exit_code"
