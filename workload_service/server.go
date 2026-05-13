@@ -22,7 +22,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	kpsapi "github.com/GoogleCloudPlatform/key-protection-module/key_protection_service/proto"
 	api "github.com/GoogleCloudPlatform/key-protection-module/workload_service/proto"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -919,7 +918,7 @@ func (s *Server) startHeartbeat(ctx context.Context) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	client := kpsapi.NewKeyProtectionServiceClient(conn)
+	client := kpspb.NewKeyProtectionServiceClient(conn)
 
 	var cachedToken string
 	ticker := time.NewTicker(heartbeatInterval)
@@ -937,7 +936,7 @@ func (s *Server) startHeartbeat(ctx context.Context) {
 
 // performHeartbeat sends a single heartbeat request to the KPS and handles the response.
 // It implements exponential backoff on failure.
-func (s *Server) performHeartbeat(ctx context.Context, client kpsapi.KeyProtectionServiceClient, cachedToken *string) {
+func (s *Server) performHeartbeat(ctx context.Context, client kpspb.KeyProtectionServiceClient, cachedToken *string) {
 	backoff := s.initialBackoff
 	maxBackoff := s.maxBackoff
 
@@ -945,7 +944,7 @@ func (s *Server) performHeartbeat(ctx context.Context, client kpsapi.KeyProtecti
 
 	for {
 		rpcCtx, cancel := context.WithTimeout(ctx, heartbeatTimeout)
-		resp, err := client.Heartbeat(rpcCtx, &kpsapi.HeartbeatRequest{})
+		resp, err := client.Heartbeat(rpcCtx, &kpspb.HeartbeatRequest{})
 		cancel()
 		if err == nil {
 			// Success: reset and return

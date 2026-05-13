@@ -48,7 +48,6 @@ func newServerWithKPS(port int, kps KeyProtectionService) (*Server, error) {
 	return s, nil
 }
 
-
 // Serve starts the gRPC server listening on the given port.
 func (s *Server) Serve() error {
 	return s.grpcServer.Serve(s.listener)

@@ -133,4 +133,3 @@ func TestServerHeartbeat(t *testing.T) {
 		t.Errorf("expected boot token %q, got %q", srv.bootToken, resp.KpsBootToken)
 	}
 }
-

@@ -165,4 +165,3 @@ func (s *grpcServer) GetKEMKey(ctx context.Context, req *kpspb.GetKEMKeyRequest)
 func (s *grpcServer) Heartbeat(_ context.Context, _ *kpspb.HeartbeatRequest) (*kpspb.HeartbeatResponse, error) {
 	return &kpspb.HeartbeatResponse{KpsBootToken: s.bootToken}, nil
 }
-

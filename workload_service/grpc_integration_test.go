@@ -430,7 +430,6 @@ func (f *fakeKPSClient) Heartbeat(context.Context, *kpspb.HeartbeatRequest, ...g
 	return nil, nil
 }
 
-
 // TestRemoteKeyProtectionService_GenerateKEMKeypair_BadHandle verifies that the
 // WSD client adapter rejects a malformed (non-UUID) key handle returned by a
 // misbehaving KPS instead of propagating uuid.Nil silently.
