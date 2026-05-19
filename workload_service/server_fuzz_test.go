@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/google/uuid"
 	keymanager "github.com/GoogleCloudPlatform/key-protection-module/km_common/proto"
 	api "github.com/GoogleCloudPlatform/key-protection-module/workload_service/proto"
 )
@@ -109,3 +110,55 @@ func FuzzHandleDecaps(f *testing.F) {
 		srv.Handler().ServeHTTP(w, req)
 	})
 }
+
+func FuzzGetKeyClaims(f *testing.F) {
+	// Seed corpus
+	f.Add("00000000-0000-0000-0000-000000000000", int32(keymanager.KeyType_KEY_TYPE_VM_PROTECTION_BINDING))
+	f.Add("00000000-0000-0000-0000-000000000000", int32(keymanager.KeyType_KEY_TYPE_VM_PROTECTION_KEY))
+	f.Add("invalid-uuid", int32(999))
+
+	f.Fuzz(func(t *testing.T, handle string, keyType int32) {
+		socketPath := filepath.Join(t.TempDir(), "fuzz_get_claims.sock")
+		
+		// Pick a mode based on fuzzed input to get coverage for both
+		mode := keymanager.KeyProtectionMechanism_KEY_PROTECTION_VM_EMULATED
+		if hash(handle)%2 == 0 {
+			mode = keymanager.KeyProtectionMechanism_KEY_PROTECTION_VM
+		}
+
+		srv, err := NewServer(&keyProtectionService{}, &workloadService{}, socketPath, mode)
+		if err != nil {
+			t.Fatalf("failed to create server: %v", err)
+		}
+		defer func() { _ = srv.Shutdown(context.Background()) }()
+
+		// Pre-populate mapping for some UUIDs to test deep paths
+		wsdUUID := uuid.New()
+		kemUUID := uuid.New()
+		srv.mu.Lock()
+		srv.kemToBindingMap[kemUUID] = wsdUUID
+		srv.mu.Unlock()
+
+		// Also try with the generated kemUUID occasionally
+		currentHandle := handle
+		if hash(handle)%3 == 0 {
+			currentHandle = kemUUID.String()
+		}
+
+		req := &keymanager.GetKeyClaimsRequest{
+			KeyHandle: &keymanager.KeyHandle{Handle: currentHandle},
+			KeyType:   keymanager.KeyType(keyType),
+		}
+
+		_, _ = srv.GetKeyClaims(context.Background(), req)
+	})
+}
+
+func hash(s string) uint32 {
+	h := uint32(0)
+	for i := 0; i < len(s); i++ {
+		h = 31*h + uint32(s[i])
+	}
+	return h
+}
+
